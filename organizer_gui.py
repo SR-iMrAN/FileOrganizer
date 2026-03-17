@@ -5,6 +5,7 @@ import threading
 import webbrowser
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
+import tkinter as tk
 import pystray
 from PIL import Image, ImageDraw
 import sys
@@ -16,51 +17,100 @@ ctk.set_default_color_theme("blue")
 # ---------- VERSION ----------
 CURRENT_VERSION = "1.1"
 VERSION_URL = "https://raw.githubusercontent.com/SR-iMrAN/FileOrganizer/main/version.txt"
-UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/v1.1/SmartSort.exe"
+UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/v1.2/SmartSort.exe"
 
 # ---------- CONFIG ----------
 CONFIG_FILE = "config.txt"
+selected_path = os.path.join(os.path.expanduser("~"), "Downloads")
 
 if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "r") as f:
-        selected_path = f.read()
-else:
-    selected_path = os.path.join(os.path.expanduser("~"), "Downloads")
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            selected_path = f.read()
+    except:
+        pass
 
 running = False
+tray_icon = None
 
-# ---------- UPDATE SYSTEM ----------
+# ---------- SPLASH ----------
+def show_splash():
+    splash = tk.Tk()
+    splash.overrideredirect(True)
+    splash.geometry("400x200+500+300")
+    splash.configure(bg="#111")
+
+    tk.Label(splash, text="SmartSort", fg="white", bg="#111",
+             font=("Segoe UI", 26, "bold")).pack(expand=True)
+
+    for i in range(0, 11):
+        splash.attributes("-alpha", i * 0.1)
+        splash.update()
+        time.sleep(0.04)
+
+    time.sleep(0.8)
+
+    for i in range(10, -1, -1):
+        splash.attributes("-alpha", i * 0.1)
+        splash.update()
+        time.sleep(0.04)
+
+    splash.destroy()
+
+# ---------- VERSION FIX ----------
+def version_tuple(v):
+    return tuple(map(int, v.split(".")))
+
+# ---------- UPDATE ----------
 def check_update(auto=False):
     try:
-        latest = requests.get(VERSION_URL).text.strip()
+        res = requests.get(VERSION_URL, headers={"User-Agent": "Mozilla/5.0"})
+        text = res.text.strip()
 
-        if latest > CURRENT_VERSION:
-            if auto:
-                res = messagebox.askyesno("Update", f"New version {latest} available. Update now?")
-            else:
-                res = messagebox.askyesno("Update", f"New version {latest} available. Update now?")
+        if "<" in text:
+            return
 
-            if res:
+        if version_tuple(text) > version_tuple(CURRENT_VERSION):
+            if messagebox.askyesno("Update", f"New version {text} available. Update now?"):
                 download_update()
         else:
             if not auto:
                 messagebox.showinfo("Update", "You are using latest version.")
     except:
         if not auto:
-            messagebox.showerror("Error", "Could not check updates")
+            messagebox.showerror("Error", "Update check failed")
 
 def download_update():
     try:
+        exe_dir = os.path.dirname(sys.executable)
+        current_exe = sys.executable
+
+        new_exe = os.path.join(exe_dir, "SmartSort_new.exe")
+        final_exe = os.path.join(exe_dir, "SmartSort.exe")
+
         data = requests.get(UPDATE_URL).content
-
-        new_file = os.path.join(os.getcwd(), "SmartSort_new.exe")
-
-        with open(new_file, "wb") as f:
+        with open(new_exe, "wb") as f:
             f.write(data)
 
-        messagebox.showinfo("Update", "Update downloaded! Replace old file and restart.")
-    except:
-        messagebox.showerror("Error", "Download failed")
+        updater = os.path.join(exe_dir, "update.bat")
+
+        with open(updater, "w") as f:
+            f.write(f"""
+@echo off
+timeout /t 2 >nul
+del "{current_exe}"
+rename "{new_exe}" "SmartSort.exe"
+start "" "{final_exe}"
+del "%~f0"
+""")
+
+        messagebox.showinfo("Update", "Updating... restarting app")
+
+        os.startfile(updater)
+        app.destroy()
+
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
 
 def auto_check():
     time.sleep(3)
@@ -90,8 +140,18 @@ def loop():
     while running:
         for f in os.listdir(selected_path):
             path = os.path.join(selected_path, f)
+
             if os.path.isfile(path):
-                move_file(path, f)
+                try:
+                    size1 = os.path.getsize(path)
+                    time.sleep(0.2)
+                    size2 = os.path.getsize(path)
+
+                    if size1 == size2:
+                        move_file(path, f)
+                except:
+                    pass
+
         time.sleep(5)
 
 # ---------- CONTROLS ----------
@@ -100,6 +160,7 @@ def start():
     if running:
         messagebox.showinfo("Info", "Already Running")
         return
+
     running = True
     threading.Thread(target=loop, daemon=True).start()
     status_label.configure(text="Running", text_color="#00ff99")
@@ -109,17 +170,6 @@ def stop():
     running = False
     status_label.configure(text="Stopped", text_color="red")
 
-# ---------- FOLDER SELECT ----------
-def choose_folder():
-    global selected_path
-    path = filedialog.askdirectory()
-    if path:
-        selected_path = path
-        path_label.configure(text=selected_path)
-
-        with open(CONFIG_FILE, "w") as f:
-            f.write(selected_path)
-
 # ---------- STARTUP ----------
 def add_startup():
     import winshell
@@ -127,7 +177,6 @@ def add_startup():
 
     startup = winshell.startup()
     exe_path = sys.executable
-
     shortcut = os.path.join(startup, "SmartSort.lnk")
 
     if os.path.exists(shortcut):
@@ -137,16 +186,36 @@ def add_startup():
     shell = Dispatch('WScript.Shell')
     sc = shell.CreateShortCut(shortcut)
     sc.Targetpath = exe_path
+    sc.Arguments = "--startup"
     sc.WorkingDirectory = os.path.dirname(exe_path)
     sc.save()
 
     messagebox.showinfo("Startup", "Added Successfully")
 
+def auto_start_if_needed():
+    global running
+    if "--startup" in sys.argv:
+        running = True
+        threading.Thread(target=loop, daemon=True).start()
+        hide_window()
+
+# ---------- FOLDER ----------
+def choose_folder():
+    global selected_path
+    path = filedialog.askdirectory()
+
+    if path:
+        selected_path = path
+        path_label.configure(text=selected_path)
+
+        with open(CONFIG_FILE, "w") as f:
+            f.write(selected_path)
+
 # ---------- WEBSITE ----------
 def open_site():
     webbrowser.open("https://sr-imran.github.io/sri/")
 
-# ---------- SYSTEM TRAY ----------
+# ---------- TRAY ----------
 def create_image():
     image = Image.new('RGB', (64, 64), color=(0, 0, 0))
     d = ImageDraw.Draw(image)
@@ -163,9 +232,14 @@ def quit_app(icon, item):
     app.destroy()
 
 def hide_window():
+    global tray_icon
+
     app.withdraw()
 
-    icon = pystray.Icon(
+    if tray_icon:
+        return
+
+    tray_icon = pystray.Icon(
         "SmartSort",
         create_image(),
         "SmartSort",
@@ -175,19 +249,21 @@ def hide_window():
         )
     )
 
-    threading.Thread(target=icon.run, daemon=True).start()
+    threading.Thread(target=tray_icon.run, daemon=True).start()
+
+# ---------- START ----------
+if "--startup" not in sys.argv:
+    show_splash()
 
 # ---------- UI ----------
 app = ctk.CTk()
 app.title("SmartSort Organizer")
 app.geometry("450x550")
-
 app.protocol("WM_DELETE_WINDOW", hide_window)
 
-title = ctk.CTkLabel(app, text="SmartSort", font=("Arial", 24, "bold"))
-title.pack(pady=10)
+ctk.CTkLabel(app, text="SmartSort", font=("Arial", 24, "bold")).pack(pady=10)
 
-status_label = ctk.CTkLabel(app, text="Stopped", text_color="red", font=("Arial", 14))
+status_label = ctk.CTkLabel(app, text="Stopped", text_color="red")
 status_label.pack(pady=5)
 
 ctk.CTkButton(app, text="Start", command=start).pack(pady=10)
@@ -198,15 +274,14 @@ path_label.pack(pady=10)
 
 ctk.CTkButton(app, text="Select Folder", command=choose_folder).pack(pady=5)
 ctk.CTkButton(app, text="Add to Startup", command=add_startup).pack(pady=10)
-
-# 🔥 NEW UPDATE BUTTON
 ctk.CTkButton(app, text="Check for Updates", command=check_update).pack(pady=5)
 
 footer = ctk.CTkLabel(app, text="© SR Imran", text_color="cyan", cursor="hand2")
 footer.pack(side="bottom", pady=10)
 footer.bind("<Button-1>", lambda e: open_site())
 
-# 🔥 AUTO UPDATE CHECK (BACKGROUND)
 threading.Thread(target=auto_check, daemon=True).start()
+
+auto_start_if_needed()
 
 app.mainloop()
