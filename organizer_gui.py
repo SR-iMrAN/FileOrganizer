@@ -15,9 +15,9 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # ---------- VERSION ----------
-CURRENT_VERSION = "1.1"
+CURRENT_VERSION = "1.2"
 VERSION_URL = "https://raw.githubusercontent.com/SR-iMrAN/FileOrganizer/main/version.txt"
-UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/v1.2/SmartSort.exe"
+UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/V1.3/organizer_gui.exe"
 
 # ---------- CONFIG ----------
 CONFIG_FILE = "config.txt"
