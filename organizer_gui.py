@@ -27,7 +27,7 @@ ctk.set_default_color_theme("blue")
 # ---------- VERSION ----------
 CURRENT_VERSION = "1.4"  # Fix: update this after every release so update loop stops
 VERSION_URL = "https://raw.githubusercontent.com/SR-iMrAN/FileOrganizer/main/version.txt"
-UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/v1.4/organizer_gui.exe"
+UPDATE_URL = "https://github.com/SR-iMrAN/FileOrganizer/releases/download/v1.4/SmartSort.exe"
 GITHUB_RELEASE_PAGE = "https://github.com/SR-iMrAN/FileOrganizer/releases/latest"
 
 # ---------- CONFIG ----------
